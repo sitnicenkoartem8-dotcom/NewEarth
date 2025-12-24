@@ -1,0 +1,423 @@
+<!--
+  Новая Земля — single-file статический сайт
+  Сохраните как index.html и откройте в браузере.
+
+  Как пользоваться:
+  - Для редактирования: нажмите "Войти (Владелец)" или "Войти (Админ)" и введите пароль.
+    По умолчанию: владелец owner123, админ admin123 — обязательно измените в коде/локальномStorage
+  - Владелец может: менять пароли, блокировать публичное редактирование, экспорт/импорт данных.
+  - Админ может редактировать топы, правила, загружать карту.
+  - Для совместной работы: используйте кнопки Экспорт/Импорт (обмен JSON) или попросите меня добавить бэкенд (Firebase/Replit/etc).
+
+  Безопасность: это статический фронтенд. Пароли хранятся в localStorage — удобство, но не защищено для публичной инфраструктуры.
+  Для настоящей много-пользовательской системы нужен сервер/БД и реальная аутентификация.
+-->
+
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Новая Земля — оффлайн демо</title>
+  <meta name="description" content="Сайт-справочник для игры "Новая Земля" — правила, карта, топы и админ-панель">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root{--bg:#0f1724;--card:#0b1220;--accent:#6ee7b7;--muted:#9aa4b2;--glass: rgba(255,255,255,0.03)}
+    *{box-sizing:border-box}
+    body{font-family:Inter,system-ui,Segoe UI,Roboto,'Helvetica Neue',Arial; margin:0;background:linear-gradient(180deg,#071127 0%, #071827 100%);color:#e6eef6}
+    .container{max-width:1100px;margin:28px auto;padding:20px}
+    header{display:flex;gap:12px;align-items:center;justify-content:space-between}
+    .brand{display:flex;gap:12px;align-items:center}
+    .logo{width:54px;height:54px;border-radius:12px;background:linear-gradient(135deg,var(--accent),#60a5fa);display:flex;align-items:center;justify-content:center;font-weight:800;color:#022}
+    h1{margin:0;font-size:20px}
+    .nav-buttons{display:flex;gap:8px;align-items:center}
+    button{background:var(--glass);border:1px solid rgba(255,255,255,0.04);padding:8px 12px;border-radius:10px;color:inherit;cursor:pointer}
+    button.primary{background:linear-gradient(90deg,var(--accent),#60a5fa);color:#022;border:none}
+    .hero{display:grid;grid-template-columns:1fr 380px;gap:18px;margin-top:18px}
+    .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));padding:16px;border-radius:14px;border:1px solid rgba(255,255,255,0.03)}
+    .welcome{padding:22px}
+    .welcome h2{margin:0 0 8px 0}
+    .muted{color:var(--muted);font-size:14px}
+    .map-area img{width:100%;height:auto;border-radius:10px;display:block}
+    .controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+    .tabs{display:flex;gap:8px;margin-top:12px}
+    .tab{padding:8px 12px;border-radius:8px;background:rgba(255,255,255,0.02);cursor:pointer}
+
+    /* top lists */
+    .grids{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:14px}
+    .list{padding:12px}
+    table{width:100%;border-collapse:collapse}
+    td,th{padding:6px;text-align:left;border-bottom:1px dashed rgba(255,255,255,0.03);font-size:14px}
+    th{font-weight:600}
+
+    /* accordion */
+    .accordion-item{border-radius:10px;margin-top:8px;overflow:hidden}
+    .accordion-head{display:flex;justify-content:space-between;align-items:center;padding:10px;background:rgba(255,255,255,0.01);cursor:pointer}
+    .accordion-body{padding:12px;background:linear-gradient(180deg, rgba(255,255,255,0.01), transparent)}
+
+    footer{margin-top:24px;text-align:center;color:var(--muted);font-size:13px}
+
+    /* admin badge */
+    .badge{padding:6px 8px;border-radius:999px;background:rgba(255,255,255,0.04);font-weight:600}
+
+    /* responsive */
+    @media(max-width:900px){.hero{grid-template-columns:1fr} .grids{grid-template-columns:1fr}}
+
+    /* small helpers */
+    .flex{display:flex;gap:8px;align-items:center}
+    input[type=file]{display:none}
+    .uploader{display:flex;gap:6px;align-items:center}
+    .toast{position:fixed;right:20px;bottom:20px;background:#0b1220;padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.04)}
+    .small{font-size:13px;color:var(--muted)}
+    .editor{border:1px dashed rgba(255,255,255,0.04);padding:8px;border-radius:8px}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="brand">
+        <div class="logo">NZ</div>
+        <div>
+          <h1>Новая Земля</h1>
+          <div class="small muted">Справочник игры — карта, правила, топы и админка</div>
+        </div>
+      </div>
+      <div class="nav-buttons">
+        <div id="roleBadge" class="badge">Гость</div>
+        <button onclick="showSection('map')">Карта</button>
+        <button onclick="showSection('rules')">Правила</button>
+        <button onclick="showSection('tops')">Топы</button>
+        <button class="primary" onclick="promptLogin('owner')">Войти (Владелец)</button>
+        <button onclick="promptLogin('admin')">Войти (Админ)</button>
+      </div>
+    </header>
+
+    <main class="hero">
+      <section class="card welcome" id="section-welcome">
+        <h2>Приветствую в «Новой Земле»</h2>
+        <p class="muted">Здесь вы найдёте карту, правила и текущие рейтинги племён. Для редактирования используйте вход как Владелец или Админ.</p>
+
+        <div class="controls">
+          <button onclick="showSection('map')">Открыть карту</button>
+          <button onclick="showSection('tops')">Посмотреть топы</button>
+          <button onclick="showSection('rules')">Правила и системы</button>
+          <button onclick="scrollTo('#admin')">Админ-панель</button>
+        </div>
+
+        <div class="tabs">
+          <div class="tab" onclick="quickAction('giveEnergyAll')">+20 ⚡ всем (демо)</div>
+          <div class="tab" onclick="quickAction('randomEvent')">Случайное событие</div>
+        </div>
+
+        <div style="margin-top:12px" id="welcomeText" class="small editor" contenteditable="false">
+          <strong>Новая Земля</strong> — игра в Telegram: игроки создают страны, тратят энергию на разведку и захват территорий. На этой странице вы можете хранить актуальную карту, правила и рейтинги.
+        </div>
+
+      </section>
+
+      <aside class="card map-area">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <strong>Карта (загрузите свою)</strong>
+          <div class="small muted">Поддерживается PNG/JPG</div>
+        </div>
+
+        <div style="margin-top:10px">
+          <label class="uploader">
+            <input id="mapFile" type="file" accept="image/*" onchange="loadMap(event)">
+            <button>Загрузить карту</button>
+          </label>
+          <button onclick="resetMap()">Сбросить</button>
+        </div>
+
+        <div style="margin-top:12px">
+          <img id="mapPreview" src="" alt="Карта не загружена" style="display:none">
+        </div>
+
+        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+          <button onclick="togglePublicEdit()">Переключить публичное редактирование</button>
+          <button onclick="exportData()">Экспорт данных</button>
+          <label style="display:inline-block">
+            <input type="file" id="importFile" accept="application/json" onchange="importData(event)" style="display:none">
+            <button onclick="document.getElementById('importFile').click()">Импорт данных</button>
+          </label>
+        </div>
+
+      </aside>
+    </main>
+
+    <!-- Табы/Секции -->
+    <div class="card" style="margin-top:14px" id="section-map" hidden>
+      <h3>Интерактивная карта</h3>
+      <p class="muted">Загружайте карту, отмечайте территории (демонстрация статичных маркеров).</p>
+      <div id="mapMarkers" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;margin-top:12px"></div>
+      <div class="small muted" style="margin-top:10px">Функции: клик по племени — редактировать его параметры (только в режиме админ/владелец).</div>
+    </div>
+
+    <div class="card" style="margin-top:14px" id="section-tops">
+      <h3>Топы племен</h3>
+      <div class="grids">
+        <div class="list card">
+          <h4>Топ по армии</h4>
+          <table id="topArmy"><thead><tr><th>#</th><th>Племя</th><th>Армия</th><th></th></tr></thead><tbody></tbody></table>
+        </div>
+        <div class="list card">
+          <h4>Топ по населению</h4>
+          <table id="topPop"><thead><tr><th>#</th><th>Племя</th><th>Население</th><th></th></tr></thead><tbody></tbody></table>
+        </div>
+        <div class="list card">
+          <h4>Топ по территориям</h4>
+          <table id="topTerr"><thead><tr><th>#</th><th>Племя</th><th>Территории</th><th></th></tr></thead><tbody></tbody></table>
+        </div>
+        <div class="list card">
+          <h4>Топ по уровню счастья</h4>
+          <table id="topHappy"><thead><tr><th>#</th><th>Племя</th><th>Счастье</th><th></th></tr></thead><tbody></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:14px" id="section-rules" hidden>
+      <h3>Правила и системы</h3>
+      <div class="accordion-item">
+        <div class="accordion-head" onclick="toggleAccordion(this)">
+          <div>🆕 Для новичков</div>
+          <div class="small muted">Нажмите, чтобы открыть</div>
+        </div>
+        <div class="accordion-body">
+          <p><strong>Если ты новичок, вот как играть:</strong></p>
+          <ol>
+            <li>Придумай название своей страны</li>
+            <li>Сделай флаг</li>
+            <li>Назови столицу</li>
+            <li>Выбери местоположение</li>
+            <li>После этого тебя добавят на карту</li>
+          </ol>
+          <p>Каждый час +20 ⚡️, максимум 100 ⚡️. Налоги: 5—40 ⚡️/час. Слишком высокие — риск восстания.</p>
+        </div>
+      </div>
+
+      <div class="accordion-item">
+        <div class="accordion-head" onclick="toggleAccordion(this)">
+          <div>🔋 Энергия и расходы</div>
+          <div class="small muted">Подробно</div>
+        </div>
+        <div class="accordion-body">
+          <h4>Система энергии</h4>
+          <p>Каждые 30 минут племя получает 15 энергии. Максимум 100. Энергия тратится на строительство, разведку, походы и пр.</p>
+          <ul>
+            <li>Улучшение поселения — 10 энергии</li>
+            <li>Разведка — 10–80 энергии</li>
+            <li>Захват территории — 20–80 энергии</li>
+            <li>Отправка разведчиков — 25 энергии</li>
+            <li>Дальний поход — 45 энергии</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="accordion-item">
+        <div class="accordion-head" onclick="toggleAccordion(this)">
+          <div>🧠 Исследования и здания</div>
+          <div class="small muted">Технологии</div>
+        </div>
+        <div class="accordion-body">
+          <p>Имеются уровни исследований для инструментов, строительства и шаманства — их стоимость в энергии приведена в правилах.</p>
+        </div>
+      </div>
+
+      <div class="accordion-item">
+        <div class="accordion-head" onclick="toggleAccordion(this)">
+          <div>⚠️ Восстание и счастье</div>
+          <div class="small muted">Опасности</div>
+        </div>
+        <div class="accordion-body">
+          <p>Счастье измеряется 0–100%. Низкое счастье: риск бунтов, потеря территорий и войск.</p>
+          <p>Порог восстания: ≤30% — возможен бунт, ≤10% — автоматическое восстание.</p>
+        </div>
+      </div>
+    </div>
+
+    <div id="admin" class="card" style="margin-top:14px">
+      <h3>Админ-панель</h3>
+      <div class="small muted">Здесь — быстрые инструменты. Требуется роль Владелец/Админ для редактирования.</div>
+
+      <div style="margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="card">
+          <h4>Быстрые функции</h4>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button onclick="giveEnergyToSelected(20)">+20 ⚡ выбранному</button>
+            <button onclick="modifyTax(15)">Установить налоги +15 ⚡</button>
+            <button onclick="randomEvent()">Случайное событие</button>
+            <button onclick="addDemoPlayer()">Добавить тест-племя</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h4>Параметры сайта</h4>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div>Владелец: <span id="ownerInfo" class="small muted">не задан</span></div>
+            <button onclick="changePassword('owner')">Сменить пароль владельца</button>
+            <button onclick="changePassword('admin')">Сменить пароль админа</button>
+            <div class="small muted">Совет: после разработки разместите файл на GitHub Pages / Netlify и подключите бэкенд для реальной авторизации.</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <footer>
+      Сделано для игры «Новая Земля». Рекомендую разместить сайт на любом статическом хостинге для публичного доступа.  
+    </footer>
+
+  </div>
+
+  <div id="toast" class="toast" style="display:none"></div>
+
+  <script>
+    // ---------- Простая модель данных и сохранение в localStorage ----------
+    const STORAGE_KEY = 'nova_zemlya_data_v1'
+
+    // начальные данные — берём из текста, который вы дали
+    const defaultData = {
+      meta:{ownerName:'Владелец',ownerPass:'owner123',adminPass:'admin123',publicEdit:true},
+      map:{dataUrl:'',name:''},
+      players: [
+        {id:1,name:'МЕТАМФИЛЕНД',army:0,pop:7,territories:24,happy:50,energy:50},
+        {id:2,name:'СнюсЛенд',army:0,pop:7,territories:0,happy:50,energy:50}
+      ]
+    }
+
+    // загрузка / инициализация
+    function loadState(){
+      const raw = localStorage.getItem(STORAGE_KEY)
+      if(!raw){
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(defaultData))
+        return JSON.parse(JSON.stringify(defaultData))
+      }
+      try{ return JSON.parse(raw) }catch(e){ localStorage.setItem(STORAGE_KEY, JSON.stringify(defaultData)); return defaultData }
+    }
+    let state = loadState()
+
+    // роль: 'guest' | 'admin' | 'owner'
+    let role = 'guest'
+    updateUI()
+
+    // ---------- UI helpers ----------
+    function toast(text, timeout=3000){
+      const t = document.getElementById('toast')
+      t.innerText = text; t.style.display='block'
+      setTimeout(()=>t.style.display='none', timeout)
+    }
+
+    function saveState(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); renderAll(); }
+
+    function renderAll(){ renderMap(); renderTops(); renderMarkers(); updateOwnerInfo(); }
+
+    // ---------- Map upload / preview ----------
+    function loadMap(e){
+      const f = e.target.files[0]; if(!f) return
+      const reader = new FileReader();
+      reader.onload = ()=>{
+        state.map.dataUrl = reader.result
+        state.map.name = f.name
+        saveState(); toast('Карта загружена')
+      }
+      reader.readAsDataURL(f)
+    }
+    function resetMap(){ state.map = {dataUrl:'',name:''}; saveState(); }
+
+    function renderMap(){ const img = document.getElementById('mapPreview'); if(state.map.dataUrl){ img.src = state.map.dataUrl; img.style.display='block' } else { img.style.display='none' } }
+
+    // ---------- Markers demo (статический) ----------
+    function renderMarkers(){ const wrap = document.getElementById('mapMarkers'); wrap.innerHTML=''
+      state.players.forEach(p=>{
+        const el = document.createElement('div'); el.className='card';
+        el.innerHTML = `<strong>${p.name}</strong><div class="small">Армия: ${p.army} • Поп: ${p.pop} • Терр: ${p.territories} • Счастье: ${p.happy}%</div>
+          <div style="margin-top:8px;display:flex;gap:6px"><button onclick="selectPlayer(${p.id})">Выбрать</button><button onclick="openEditPlayer(${p.id})">Редактировать</button></div>`
+        wrap.appendChild(el)
+      })
+    }
+
+    function selectPlayer(id){ const p = state.players.find(x=>x.id===id); if(!p) return toast('Племя не найдено'); window.selectedPlayer = p; toast('Выбран: '+p.name) }
+
+    function openEditPlayer(id){ if(!canEdit()) return toast('Требуется роль Админ/Владелец'); const p = state.players.find(x=>x.id===id); if(!p) return
+      const name = prompt('Название племени', p.name); if(name!==null) p.name = name
+      const army = parseInt(prompt('Армия', p.army)) || p.army
+      const pop = parseInt(prompt('Население', p.pop)) || p.pop
+      const terr = parseInt(prompt('Территории', p.territories)) || p.territories
+      const happy = parseInt(prompt('Счастье (0-100)', p.happy)) || p.happy
+      p.army = army; p.pop = pop; p.territories = terr; p.happy = happy
+      saveState(); toast('Сохранено') }
+
+    // ---------- Tops rendering ----------
+    function renderTops(){ renderTable('topArmy','army'); renderTable('topPop','pop'); renderTable('topTerr','territories'); renderTable('topHappy','happy') }
+    function renderTable(elId, key){ const tbody = document.getElementById(elId).querySelector('tbody'); tbody.innerHTML=''
+      const arr = [...state.players].sort((a,b)=>b[key]-a[key]).slice(0,12)
+      arr.forEach((p,i)=>{
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${i+1}</td><td>${p.name}</td><td>${p[key]}</td><td><button onclick="editRow(${p.id})">✏️</button></td>`
+        tbody.appendChild(tr)
+      })
+    }
+
+    function editRow(id){ if(!canEdit()) return toast('Требуется роль Админ/Владелец'); openEditPlayer(id) }
+
+    // ---------- Roles / Auth (простая реализация для демо) ----------
+    function promptLogin(kind){ const pass = prompt('Введите пароль ('+kind+')'); if(!pass) return; const meta = state.meta
+      if(kind==='owner' && pass===meta.ownerPass){ role='owner'; toast('Вход выполнен как Владелец'); updateUI(); return }
+      if(kind==='admin' && pass===meta.adminPass){ role='admin'; toast('Вход выполнен как Админ'); updateUI(); return }
+      toast('Неверный пароль') }
+
+    function canEdit(){ return role==='admin' || role==='owner' || state.meta.publicEdit }
+
+    function updateUI(){ document.getElementById('roleBadge').innerText = role==='guest' ? 'Гость' : (role==='admin' ? 'Админ' : 'Владелец'); renderAll(); }
+
+    function changePassword(kind){ if(role!=='owner') return toast('Только владелец может менять пароли'); const np = prompt('Новый пароль для '+kind); if(!np) return; if(kind==='owner') state.meta.ownerPass = np; else state.meta.adminPass = np; saveState(); toast('Пароль обновлён') }
+
+    function updateOwnerInfo(){ document.getElementById('ownerInfo').innerText = state.meta.ownerName + (state.meta.publicEdit ? ' • публичное редактирование ВКЛ' : ' • публичное редактирование ВЫКЛ') }
+
+    function togglePublicEdit(){ if(role!=='owner'){ state.meta.publicEdit = !state.meta.publicEdit; saveState(); toast('Публичное редактирование: '+(state.meta.publicEdit ? 'ВКЛ' : 'ВЫКЛ')); return }
+      // владелец — можно переключать
+      state.meta.publicEdit = !state.meta.publicEdit; saveState(); toast('Публичное редактирование: '+(state.meta.publicEdit ? 'ВКЛ' : 'ВЫКЛ')) }
+
+    // ---------- Actions / Quick functions ----------
+    function giveEnergyToSelected(n){ if(!window.selectedPlayer) return toast('Сначала выберите племя'); window.selectedPlayer.energy = Math.min(100, (window.selectedPlayer.energy||0)+n); saveState(); }
+    function modifyTax(n){ // демонстрация: уменьшим счастье у всех
+      state.players.forEach(p=>{ p.happy = Math.max(0, p.happy - Math.round(n/2)) }); saveState(); toast('Налоги изменены — счастье упало') }
+
+    function quickAction(action){ if(action==='giveEnergyAll'){ state.players.forEach(p=>p.energy = Math.min(100,(p.energy||0)+20)); saveState(); toast('+20 энергии всем племенам') }
+      if(action==='randomEvent'){ randomEvent() } }
+
+    function randomEvent(){ const ev = Math.random()
+      if(ev<0.33){ state.players.forEach(p=>p.happy = Math.max(0,p.happy-5)); toast('Произошли пожары — счастье упало') }
+      else if(ev<0.66){ state.players.forEach(p=>p.pop = Math.max(1,p.pop-1)); toast('Эпидемия — население снизилось') }
+      else{ state.players.forEach(p=>p.army += 5); toast('Успех в бою — армия выросла') }
+      saveState()
+    }
+
+    // ---------- Export / Import ----------
+    function exportData(){ const data = JSON.stringify(state, null, 2); const blob = new Blob([data],{type:'application/json'}); const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='nova_zemlya_data.json'; a.click(); URL.revokeObjectURL(url); }
+    function importData(e){ const f = e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=()=>{ try{ const obj = JSON.parse(r.result); if(obj && obj.players){ state = obj; saveState(); toast('Данные импортированы'); } else toast('Неверный файл'); }catch(err){ toast('Ошибка парсинга') } }; r.readAsText(f) }
+
+    // ---------- Demo: добавить племя ----------
+    function addDemoPlayer(){ if(!canEdit()) return toast('Требуется роль Админ/Владелец'); const id = Date.now(); state.players.push({id, name:'Новый_'+id%1000, army:0, pop:5, territories:0, happy:50, energy:50}); saveState(); }
+
+    // ---------- Edit row helper ----------
+    function editRowInline(id,key){ /* можно расширить */ }
+
+    // ---------- Misc UI ----------
+    function showSection(name){ document.querySelectorAll('[id^="section-"]').forEach(el=>el.hidden=true); const el = document.getElementById('section-'+name); if(el) el.hidden=false; if(name==='map') renderMap(); }
+    function scrollTo(sel){ const el = document.querySelector(sel); if(el) el.scrollIntoView({behavior:'smooth'}) }
+
+    function toggleAccordion(head){ const body = head.nextElementSibling; if(body.style.display==='block') body.style.display='none'; else body.style.display='block' }
+
+    // ---------- initialize UI from state ----------
+    renderAll()
+
+    // first render — fill tables
+    renderTops()
+
+    // expose some functions to console for convenience
+    window.saveState = saveState; window.state = state; window.loadState = loadState; window.canEdit = canEdit
+  </script>
+</body>
+</html>
